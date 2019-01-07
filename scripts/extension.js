@@ -8,7 +8,25 @@ document.addEventListener('DOMContentLoaded', function() {
     let button = document.getElementById('getcount');
     button.addEventListener('click', function () {
         $('#status').html('Getting statuses');
-        let text = "";
+        let text = "count";
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {data: text}, setInfo);
+        });
+    });
+
+    let buttonjql = document.getElementById('getcountjql');
+    buttonjql.addEventListener('click', function () {
+        $('#status').html('Getting statuses');
+        let text = "countjql";
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            chrome.tabs.sendMessage(tabs[0].id, {data: text}, setInfo);
+        });
+    });
+
+    let buttonSprint = document.getElementById('getsprinthealth');
+    buttonSprint.addEventListener('click', function () {
+        $('#status').html('Getting statuses');
+        let text = "sprint";
         chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
             chrome.tabs.sendMessage(tabs[0].id, {data: text}, setInfo);
         });
@@ -17,4 +35,5 @@ document.addEventListener('DOMContentLoaded', function() {
 
 chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     $('#status').html(message.message);
+    jQuery("#accordion").accordion();
 });
