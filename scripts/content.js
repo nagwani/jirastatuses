@@ -8,32 +8,56 @@ chrome.runtime.onMessage.addListener( function(request, sender, sendResponse) {
         results+= '<p>' + key + ' - ' + values +' </p>';
     }
 
+
+
+    let urlParams = new URLSearchParams(window.location.search);
+    let jiraURL = window.location.origin;
+    let jql = urlParams.get('jql');
+    let requestURL = jiraURL + '/rest/api/2/search?jql=' + jql + '&maxResults=100&expand=changelog';
+
     if (data == "countjql") {
-        let jsonObject = JSON.parse(document.body.innerText);
-        let statuses = new Map();
+        let jsonData = "";
 
-        results = '<div id="accordion">';
+        jQuery.when($.ajax( requestURL )).done (function(data) {
+            jsonObject = data;
+            let statusGroup = new Map();
+            
+            results = '<div id="accordion">';
+    
+            jQuery(jsonObject.issues).each(function(){
+                results+='<h3>' + this.key + '</h3>';
+                issueKey = this.key;
+                let searchTickets = new Map();
+                jQuery(this.changelog.histories).each(function(){
+                    if (this.items[0].field == "status") {
+                        if (searchTickets.has(this.items[0].fromString)) {
+                            searchTickets.set(this.items[0].fromString,parseInt(searchTickets.get(this.items[0].fromString))+1);
+                        }
+                        else {
+                            searchTickets.set(this.items[0].fromString,1);
+                        }
 
-        jQuery(jsonObject.issues).each(function(){
-            results+='<h3>' + this.key + '</h3>';
-            jQuery(this.changelog.histories).each(function(){
-                if (this.items[0].field == "status") {
-                    if (statuses.has(this.items[0].fromString)) {
-                        statuses.set(this.items[0].fromString,parseInt(statuses.get(this.items[0].fromString))+1);
+                        if (statusGroup.has(this.items[0].fromString)) {
+                            if (jQuery.inArray(issueKey, statusGroup)) {
+                                statusGroup.set(this.items[0].fromString,statusGroup.get(this.items[0].fromString) + ',' + issueKey);
+                            }
+                        }
+                        else {
+                            statusGroup.set(this.items[0].fromString,issueKey);
+                        }
                     }
-                    else {
-                        statuses.set(this.items[0].fromString,1);
-                    }
-                }
+                });
+                results+= '<div id="' + this.key + '">';
+                searchTickets.forEach(generateHtml);
+                results+='</div>';
+    
             });
-
-            results+= '<div id="' + this.key + '">';
-            statuses.forEach(generateHtml);
+            console.log(statusGroup);
             results+='</div>';
-
+            chrome.runtime.sendMessage({from:"script1",message:results});
         });
-        results+='</div>';
-        chrome.runtime.sendMessage({from:"script1",message:results});
+
+        
     }
     else if (data == "count") {
     
@@ -86,22 +110,27 @@ chrome.runtime.onMessage.addListener( function(request, sender, sendResponse) {
     }
     else if(data == "sprint") {
         
-        let jsonObject = JSON.parse(document.body.innerText);
-        let statuses = new Map();
-        jQuery(jsonObject.issues).each(function(){
-            if (statuses.has(this.fields.status.name)) {
-                statuses.set(this.fields.status.name,parseInt(statuses.get(this.fields.status.name)+this.fields.customfield_10004));
-            }
-            else {
-                statuses.set(this.fields.status.name,this.fields.customfield_10004);
-            }
-        })
         function generateSprintHTML(values, key)  
         { 
             results+= '<p>Story points in ' + key + ' - ' + values +' </p>';
         }
-        statuses.forEach(generateSprintHTML);
-        chrome.runtime.sendMessage({from:"script1",message:results});
+
+        jQuery.when($.ajax( requestURL )).done (function(data) {
+
+            let jsonObject = data;
+            let statuses = new Map();
+            jQuery(jsonObject.issues).each(function(){
+                if (statuses.has(this.fields.status.name)) {
+                    statuses.set(this.fields.status.name,parseInt(statuses.get(this.fields.status.name)+this.fields.customfield_10004));
+                }
+                else {
+                    statuses.set(this.fields.status.name,this.fields.customfield_10004);
+                }
+            })
+
+            statuses.forEach(generateSprintHTML);
+            chrome.runtime.sendMessage({from:"script1",message:results});
+        });
     }
 
 });
