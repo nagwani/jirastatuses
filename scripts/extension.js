@@ -36,4 +36,7 @@ document.addEventListener('DOMContentLoaded', function() {
 chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     $('#status').html(message.message);
     jQuery("#accordion").accordion();
+    if (jQuery("#accordionTickets").length) {
+        jQuery("#accordionTickets").accordion();
+    }
 });

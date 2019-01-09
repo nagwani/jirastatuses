@@ -3,61 +3,83 @@ chrome.runtime.onMessage.addListener( function(request, sender, sendResponse) {
     let data = request.data || {};
 
     let results = "";
+    let statusResults = "";
     function generateHtml(values, key)  
     { 
         results+= '<p>' + key + ' - ' + values +' </p>';
     }
 
-
+    function generateStatusResults(values, key)  
+    { 
+        valueDetails = values.split(","); 
+        statusResults+= '<h3>' + key + ' [' + valueDetails.length + ']' + '</h3>' + '<div>' + values + '</div>';
+    }
 
     let urlParams = new URLSearchParams(window.location.search);
     let jiraURL = window.location.origin;
     let jql = urlParams.get('jql');
-    let requestURL = jiraURL + '/rest/api/2/search?jql=' + jql + '&maxResults=100&expand=changelog';
+    let jiraFilter = urlParams.get('filter');
+    let requestURL = "";
+
+
+    function generateURL(){
+        if (jiraFilter) {
+            filterURL = jiraURL + '/rest/api/2/filter/' + jiraFilter;
+            jQuery.when($.ajax( filterURL )).done (function(filterData) {
+                requestURL = filterData.searchUrl + '&maxResults=100&expand=changelog';
+            });
+        }
+        else {
+            requestURL = jiraURL + '/rest/api/2/search?jql=' + jql + '&maxResults=100&expand=changelog';
+        }
+        return requestURL;
+    }
 
     if (data == "countjql") {
         let jsonData = "";
+        jQuery.when($.ajax( generateURL() )).done (function(data) {
+            jQuery.when($.ajax( requestURL )).done (function(data) {
+                jsonObject = data;
+                let statusGroup = new Map();
+                results = '<div id="accordionTickets">';
+        
+                jQuery(jsonObject.issues).each(function(){
+                    results+='<h3>' + this.key + '</h3>';
+                    issueKey = this.key;
+                    let searchTickets = new Map();
+                    jQuery(this.changelog.histories).each(function(){
+                        if (this.items[0].field == "status") {
+                            if (searchTickets.has(this.items[0].fromString)) {
+                                searchTickets.set(this.items[0].fromString,parseInt(searchTickets.get(this.items[0].fromString))+1);
+                            }
+                            else {
+                                searchTickets.set(this.items[0].fromString,1);
+                            }
 
-        jQuery.when($.ajax( requestURL )).done (function(data) {
-            jsonObject = data;
-            let statusGroup = new Map();
-            
-            results = '<div id="accordion">';
-    
-            jQuery(jsonObject.issues).each(function(){
-                results+='<h3>' + this.key + '</h3>';
-                issueKey = this.key;
-                let searchTickets = new Map();
-                jQuery(this.changelog.histories).each(function(){
-                    if (this.items[0].field == "status") {
-                        if (searchTickets.has(this.items[0].fromString)) {
-                            searchTickets.set(this.items[0].fromString,parseInt(searchTickets.get(this.items[0].fromString))+1);
-                        }
-                        else {
-                            searchTickets.set(this.items[0].fromString,1);
-                        }
-
-                        if (statusGroup.has(this.items[0].fromString)) {
-                            if (jQuery.inArray(issueKey, statusGroup)) {
-                                statusGroup.set(this.items[0].fromString,statusGroup.get(this.items[0].fromString) + ',' + issueKey);
+                            if (statusGroup.has(this.items[0].toString)) {
+                                if (statusGroup.get(this.items[0].toString).indexOf(issueKey) == -1) {
+                                    statusGroup.set(this.items[0].toString,statusGroup.get(this.items[0].toString) + ',' + issueKey);
+                                }
+                            }
+                            else {
+                                statusGroup.set(this.items[0].toString,issueKey);
                             }
                         }
-                        else {
-                            statusGroup.set(this.items[0].fromString,issueKey);
-                        }
-                    }
+                    });
+                    results+= '<div id="' + this.key + '">';
+                    searchTickets.forEach(generateHtml);
+                    results+='</div>';    
                 });
-                results+= '<div id="' + this.key + '">';
-                searchTickets.forEach(generateHtml);
-                results+='</div>';
-    
-            });
-            console.log(statusGroup);
-            results+='</div>';
-            chrome.runtime.sendMessage({from:"script1",message:results});
-        });
+            
+                statusResults = '<div id="accordion">';
+                statusGroup.forEach(generateStatusResults);
+                statusResults+='</div>'; 
 
-        
+                results+='</div>';
+                results = statusResults + results;
+                chrome.runtime.sendMessage({from:"script1",message:results});
+            });
+        });
     }
     else if (data == "count") {
     
@@ -115,21 +137,23 @@ chrome.runtime.onMessage.addListener( function(request, sender, sendResponse) {
             results+= '<p>Story points in ' + key + ' - ' + values +' </p>';
         }
 
-        jQuery.when($.ajax( requestURL )).done (function(data) {
+        jQuery.when($.ajax( generateURL() )).done (function(data) {
+            jQuery.when($.ajax( requestURL )).done (function(data) {
 
-            let jsonObject = data;
-            let statuses = new Map();
-            jQuery(jsonObject.issues).each(function(){
-                if (statuses.has(this.fields.status.name)) {
-                    statuses.set(this.fields.status.name,parseInt(statuses.get(this.fields.status.name)+this.fields.customfield_10004));
-                }
-                else {
-                    statuses.set(this.fields.status.name,this.fields.customfield_10004);
-                }
-            })
+                let jsonObject = data;
+                let statuses = new Map();
+                jQuery(jsonObject.issues).each(function(){
+                    if (statuses.has(this.fields.status.name)) {
+                        statuses.set(this.fields.status.name,parseInt(statuses.get(this.fields.status.name)+this.fields.customfield_10004));
+                    }
+                    else {
+                        statuses.set(this.fields.status.name,this.fields.customfield_10004);
+                    }
+                })
 
-            statuses.forEach(generateSprintHTML);
-            chrome.runtime.sendMessage({from:"script1",message:results});
+                statuses.forEach(generateSprintHTML);
+                chrome.runtime.sendMessage({from:"script1",message:results});
+            });
         });
     }
 
